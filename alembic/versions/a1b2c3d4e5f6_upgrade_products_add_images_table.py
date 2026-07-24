@@ -34,10 +34,20 @@ def upgrade() -> None:
     op.add_column("products", sa.Column("is_available", sa.Boolean(), nullable=False, server_default="true"))
 
     # Migrate existing price → price_from
-    op.execute("UPDATE products SET price_from = price WHERE price_from IS NULL")
+    # Check if 'price' column exists before trying to migrate from it
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='price') THEN
+                UPDATE products SET price_from = price WHERE price_from IS NULL;
+            END IF;
+        END $$;
+        """
+    )
 
     # Make price_from NOT NULL after migration
-    op.alter_column("products", "price_from", nullable=False)
+    op.alter_column("products", "price_from", sa.Numeric(12, 2), nullable=False)
 
     # Create unique index on slug
     op.create_index(op.f("ix_products_slug"), "products", ["slug"], unique=True)

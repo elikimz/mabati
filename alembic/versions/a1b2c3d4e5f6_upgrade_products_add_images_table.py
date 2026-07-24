@@ -47,7 +47,7 @@ def upgrade() -> None:
     )
 
     # Make price_from NOT NULL after migration
-    op.alter_column("products", "price_from", sa.Numeric(12, 2), nullable=False)
+    op.alter_column("products", "price_from", type_=sa.Numeric(12, 2), nullable=False)
 
     # Create unique index on slug
     op.create_index(op.f("ix_products_slug"), "products", ["slug"], unique=True)

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.session import get_db
+
+from app.core.dependencies import get_db
 from app.models.banner import Banner
 from app.schemas.banner import BannerCreate, BannerUpdate, BannerOut
 from app.routers.auth import get_current_user

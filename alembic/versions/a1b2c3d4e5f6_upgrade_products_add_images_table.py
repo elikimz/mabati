@@ -34,20 +34,25 @@ def upgrade() -> None:
     op.add_column("products", sa.Column("is_available", sa.Boolean(), nullable=False, server_default="true"))
 
     # Migrate existing price → price_from
-    # Check if 'price' column exists before trying to migrate from it
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='price') THEN
-                UPDATE products SET price_from = price WHERE price_from IS NULL;
-            END IF;
-        END $$;
-        """
-    )
+    # This is a cross-database compatible approach.
+    # On PostgreSQL, the 'price' column exists from migration 7d8099527e1f.
+    # On SQLite (fresh DB via create_all), the column may not exist.
+    # We use Python-level introspection to check before executing raw SQL.
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    product_columns = [col["name"] for col in insp.get_columns("products")]
+
+    if "price" in product_columns:
+        op.execute("UPDATE products SET price_from = price WHERE price_from IS NULL")
 
     # Make price_from NOT NULL after migration
-    op.alter_column("products", "price_from", type_=sa.Numeric(12, 2), nullable=False)
+    # Use batch mode for SQLite compatibility
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table("products") as batch_op:
+            batch_op.alter_column("price_from", type_=sa.Numeric(12, 2), nullable=False)
+    else:
+        op.alter_column("products", "price_from", type_=sa.Numeric(12, 2), nullable=False)
 
     # Create unique index on slug
     op.create_index(op.f("ix_products_slug"), "products", ["slug"], unique=True)

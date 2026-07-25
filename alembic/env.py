@@ -79,10 +79,13 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Enable batch mode for SQLite to support ALTER operations
+        is_sqlite = SYNC_DATABASE_URL.startswith("sqlite")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            render_as_batch=is_sqlite,
         )
         with context.begin_transaction():
             context.run_migrations()

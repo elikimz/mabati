@@ -108,7 +108,10 @@ def upgrade() -> None:
     op.add_column('users', sa.Column('is_active', sa.Boolean(), nullable=False))
     op.add_column('users', sa.Column('created_at', sa.DateTime(timezone=True), nullable=True))
     op.add_column('users', sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True))
-    op.drop_constraint(op.f('users_email_key'), 'users', type_='unique')
+    with op.batch_alter_table('users') as batch_op:
+        # SQLite doesn't support named unique constraints the same way.
+        # We recreate the table with a unique index instead.
+        batch_op.alter_column('email', existing_type=sa.String(length=150), nullable=False)
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     # ### end Alembic commands ###
 

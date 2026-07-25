@@ -20,13 +20,24 @@ if not DATABASE_URL:
 import re
 
 def _make_sync_url(url: str) -> str:
+    """Convert the application URL to the synchronous driver Alembic requires.
+
+    Production uses ``postgresql+asyncpg`` while local verification may use
+    ``sqlite+aiosqlite``.  SSL options are PostgreSQL-only and must never be
+    appended to a SQLite URL.
+    """
+    if url.startswith("sqlite+"):
+        return url.replace("sqlite+aiosqlite", "sqlite", 1)
+    if url.startswith("sqlite"):
+        return url
+
     url = url.replace("postgresql+asyncpg", "postgresql+psycopg2")
     url = url.replace("postgresql+aiopg", "postgresql+psycopg2")
-    # Replace ?ssl=require with ?sslmode=require (psycopg2 uses sslmode)
+    # Replace ?ssl=require with ?sslmode=require (psycopg2 uses sslmode).
     url = re.sub(r'[?&]ssl=require', '', url)
-    if 'sslmode' not in url:
-        sep = '&' if '?' in url else '?'
-        url = url + sep + 'sslmode=require'
+    if "sslmode" not in url:
+        separator = "&" if "?" in url else "?"
+        url = url + separator + "sslmode=require"
     return url
 
 SYNC_DATABASE_URL = _make_sync_url(DATABASE_URL)

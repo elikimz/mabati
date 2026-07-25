@@ -1,4 +1,4 @@
-"""Repository for Product database operations with search and filtering."""
+"""Repository for product, variation, search, and filtering operations."""
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
@@ -6,7 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.product import Product, ProductImage
+from app.models.product import Product, ProductImage, ProductVariation
 
 
 class ProductRepository:
@@ -19,6 +19,7 @@ class ProductRepository:
             .options(
                 selectinload(Product.category),
                 selectinload(Product.images),
+                selectinload(Product.variations),
             )
         )
 
@@ -31,6 +32,20 @@ class ProductRepository:
     async def get_by_slug(self, slug: str) -> Optional[Product]:
         result = await self.db.execute(
             self._base_query().where(Product.slug == slug)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_variation_by_id(self, variation_id: int) -> Optional[ProductVariation]:
+        result = await self.db.execute(
+            select(ProductVariation)
+            .options(selectinload(ProductVariation.product))
+            .where(ProductVariation.id == variation_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_variation_by_sku(self, sku: str) -> Optional[ProductVariation]:
+        result = await self.db.execute(
+            select(ProductVariation).where(ProductVariation.sku == sku)
         )
         return result.scalar_one_or_none()
 
@@ -52,7 +67,7 @@ class ProductRepository:
         query = self._base_query()
 
         if active_only:
-            query = query.where(Product.is_active == True)
+            query = query.where(Product.is_active.is_(True))
 
         if search:
             query = query.where(
@@ -62,23 +77,48 @@ class ProductRepository:
                     Product.brand.ilike(f"%{search}%"),
                     Product.product_type.ilike(f"%{search}%"),
                     Product.material.ilike(f"%{search}%"),
+                    Product.variations.any(ProductVariation.name.ilike(f"%{search}%")),
+                    Product.variations.any(ProductVariation.sku.ilike(f"%{search}%")),
                 )
             )
 
         if category_id is not None:
             query = query.where(Product.category_id == category_id)
 
+        # Preserve old top-level filtering while also matching a relevant option.
         if color:
-            query = query.where(Product.color.ilike(f"%{color}%"))
+            query = query.where(
+                or_(
+                    Product.color.ilike(f"%{color}%"),
+                    Product.variations.any(ProductVariation.color.ilike(f"%{color}%")),
+                )
+            )
 
         if gauge:
-            query = query.where(Product.gauge == gauge)
+            query = query.where(
+                or_(
+                    Product.gauge == gauge,
+                    Product.variations.any(ProductVariation.gauge == gauge),
+                )
+            )
 
         if min_price is not None:
-            query = query.where(Product.price_from >= min_price)
+            query = query.where(
+                or_(
+                    Product.price_from >= min_price,
+                    Product.variations.any(ProductVariation.price >= min_price),
+                    Product.variations.any(ProductVariation.discount_price >= min_price),
+                )
+            )
 
         if max_price is not None:
-            query = query.where(Product.price_from <= max_price)
+            query = query.where(
+                or_(
+                    Product.price_from <= max_price,
+                    Product.variations.any(ProductVariation.price <= max_price),
+                    Product.variations.any(ProductVariation.discount_price <= max_price),
+                )
+            )
 
         if in_stock is True:
             query = query.where(Product.stock_quantity > 0)
@@ -86,7 +126,7 @@ class ProductRepository:
             query = query.where(Product.stock_quantity == 0)
 
         if is_featured is not None:
-            query = query.where(Product.is_featured == is_featured)
+            query = query.where(Product.is_featured.is_(is_featured))
 
         if product_type:
             query = query.where(Product.product_type.ilike(f"%{product_type}%"))
@@ -102,7 +142,7 @@ class ProductRepository:
     async def get_featured(self, limit: int = 8) -> List[Product]:
         result = await self.db.execute(
             self._base_query()
-            .where(Product.is_featured == True, Product.is_active == True)
+            .where(Product.is_featured.is_(True), Product.is_active.is_(True))
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -113,7 +153,7 @@ class ProductRepository:
             .where(
                 Product.category_id == product.category_id,
                 Product.id != product.id,
-                Product.is_active == True,
+                Product.is_active.is_(True),
             )
             .limit(limit)
         )
@@ -123,7 +163,7 @@ class ProductRepository:
         result = await self.db.execute(
             select(Product).where(
                 Product.stock_quantity <= Product.low_stock_threshold,
-                Product.is_active == True,
+                Product.is_active.is_(True),
             )
         )
         return list(result.scalars().all())

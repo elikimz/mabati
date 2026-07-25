@@ -14,14 +14,13 @@ def inv_product(client, admin_headers):
     cat_id = cat_resp.json()["id"]
     prod_resp = client.post("/admin/products", json={
         "name": f"Inv Product {_ts()}",
-        "price": "500.00",
+        "price_from": "500.00",
         "stock_quantity": 50,
         "category_id": cat_id,
     }, headers=admin_headers)
     product = prod_resp.json()
+    # Inventory logs retain product references; suite-level database cleanup is sufficient.
     yield product
-    client.delete(f"/admin/products/{product['id']}", headers=admin_headers)
-    client.delete(f"/admin/categories/{cat_id}", headers=admin_headers)
 
 
 def test_get_low_stock_overview(client, admin_headers):

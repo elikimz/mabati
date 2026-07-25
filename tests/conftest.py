@@ -1,62 +1,79 @@
-"""
-Pytest configuration and fixtures.
+"""Safe, isolated pytest fixtures for the Mabati API.
 
-These tests run against the live Neon PostgreSQL database (same as production).
-Each test cleans up after itself to avoid data pollution.
+The test process forces a disposable SQLite database before importing the app,
+so no regression test can access the configured remote PostgreSQL database.
 """
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+
 import pytest
-import httpx
+from fastapi.testclient import TestClient
 
-BASE_URL = "http://localhost:8000"
+DATABASE_PATH = Path("/tmp/mabati_pytest.db")
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{DATABASE_PATH}"
+os.environ["DEBUG"] = "false"
 
-# Shared state across tests
-_admin_token: str = ""
-_customer_token: str = ""
+from app.database.base import Base
+from app.database.session import engine
+from app.main import app
+
 _admin_email = "testadmin@example.com"
 _customer_email = "testcustomer@example.com"
 _test_password = "TestPass123!"
 
 
+async def _reset_database() -> None:
+    DATABASE_PATH.unlink(missing_ok=True)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
+        await connection.run_sync(Base.metadata.create_all)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_database():
+    """Create and remove the disposable schema used by the complete test suite."""
+    asyncio.run(_reset_database())
+    yield
+    asyncio.run(engine.dispose())
+    DATABASE_PATH.unlink(missing_ok=True)
+
+
 @pytest.fixture(scope="session")
-def client():
-    """Synchronous HTTP client against the running server."""
-    with httpx.Client(base_url=BASE_URL, timeout=30) as c:
-        yield c
+def client(isolated_database):
+    """Synchronous in-process HTTP client backed by the disposable database."""
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(scope="session")
 def admin_token(client):
-    """Register (or login) an admin user and return its access token."""
-    # Try register first
-    client.post("/auth/register", json={
-        "name": "Test Admin",
-        "email": _admin_email,
-        "password": _test_password,
-        "role": "admin",
-    })
-    resp = client.post("/auth/login", data={
-        "username": _admin_email,
-        "password": _test_password,
-    })
-    assert resp.status_code == 200, resp.text
-    return resp.json()["access_token"]
+    """Register an isolated admin and return its bearer token."""
+    email = _admin_email
+    registration = client.post(
+        "/auth/register",
+        json={"name": "Test Admin", "email": email, "password": _test_password, "role": "admin"},
+    )
+    assert registration.status_code == 201, registration.text
+    response = client.post("/auth/login", data={"username": email, "password": _test_password})
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
 
 
 @pytest.fixture(scope="session")
 def customer_token(client):
-    """Register (or login) a customer user and return its access token."""
-    client.post("/auth/register", json={
-        "name": "Test Customer",
-        "email": _customer_email,
-        "password": _test_password,
-        "role": "customer",
-    })
-    resp = client.post("/auth/login", data={
-        "username": _customer_email,
-        "password": _test_password,
-    })
-    assert resp.status_code == 200, resp.text
-    return resp.json()["access_token"]
+    """Register an isolated customer and return its bearer token."""
+    email = _customer_email
+    registration = client.post(
+        "/auth/register",
+        json={"name": "Test Customer", "email": email, "password": _test_password, "role": "customer"},
+    )
+    assert registration.status_code == 201, registration.text
+    response = client.post("/auth/login", data={"username": email, "password": _test_password})
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
 
 
 @pytest.fixture(scope="session")

@@ -1,13 +1,14 @@
-"""Pydantic schemas for Order endpoints."""
+"""Pydantic schemas for orders and variation-aware order items."""
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 class OrderItemCreate(BaseModel):
     product_id: int
+    variation_id: Optional[int] = None
     quantity: int = Field(..., gt=0)
 
 
@@ -20,8 +21,10 @@ class OrderCreate(BaseModel):
 class OrderItemOut(BaseModel):
     id: int
     product_id: int
+    variation_id: Optional[int] = None
     quantity: int
     unit_price: Decimal
+    variation_snapshot: Optional[Dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 
@@ -33,7 +36,7 @@ class OrderOut(BaseModel):
     total_amount: Decimal
     shipping_address: Optional[str] = None
     notes: Optional[str] = None
-    items: List[OrderItemOut] = []
+    items: List[OrderItemOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

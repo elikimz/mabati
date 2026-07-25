@@ -8,3 +8,4 @@ from app.models.banner import Banner
 
 __all__ = ["User", "Category", "Product", "ProductImage", "InventoryLog", "Order", "OrderItem", "Banner"]
 from .site_content import SiteContent
+from .gallery import Gallery

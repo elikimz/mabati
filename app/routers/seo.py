@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_response, invalidate_cache
 from app.core.dependencies import get_db
 from app.models.product import Product
 from app.models.category import Category
@@ -64,6 +65,7 @@ def _url_xml(loc: str, lastmod: Optional[datetime] = None, changefreq: str = "we
 
 
 @router.get("/sitemap.xml", response_class=Response)
+@cache_response(prefix="seo:sitemap", ttl=3600)  # 1 hour cache
 async def sitemap_xml(db: AsyncSession = Depends(get_db)):
     """Generate and serve sitemap.xml with all public pages and products."""
     urls = []

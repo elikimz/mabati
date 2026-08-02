@@ -1,9 +1,10 @@
-"""Category router: public listing and admin CRUD."""
+"""Categories router — public listing + admin CRUD."""
 from typing import List
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_response, invalidate_cache
 from app.core.dependencies import get_current_admin, get_db
 from app.repositories.category_repository import CategoryRepository
 from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate
@@ -15,6 +16,7 @@ router = APIRouter(tags=["Categories"])
 # ── Public ──────────────────────────────────────────────────────────────────
 
 @router.get("/categories", response_model=List[CategoryOut])
+@cache_response(prefix="categories", ttl=900)  # 15 min cache
 async def list_categories(
     skip: int = 0,
     limit: int = 100,
@@ -35,7 +37,9 @@ async def create_category(
 ):
     """Create a new product category (admin only)."""
     service = CategoryService(db)
-    return await service.create(data)
+    result = await service.create(data)
+    await invalidate_cache(prefix="categories")
+    return result
 
 
 @router.put("/admin/categories/{category_id}", response_model=CategoryOut)
@@ -47,7 +51,9 @@ async def update_category(
 ):
     """Update an existing category (admin only)."""
     service = CategoryService(db)
-    return await service.update(category_id, data)
+    result = await service.update(category_id, data)
+    await invalidate_cache(prefix="categories")
+    return result
 
 
 @router.delete("/admin/categories/{category_id}", status_code=204)
@@ -59,3 +65,4 @@ async def delete_category(
     """Delete a category (admin only)."""
     service = CategoryService(db)
     await service.delete(category_id)
+    await invalidate_cache(prefix="categories")

@@ -1,16 +1,32 @@
 """Main FastAPI application entry point."""
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.cache import connect_redis, close_redis
 from app.utils.logging import setup_logging
 
 # Configure logging before anything else
 setup_logging(debug=settings.DEBUG)
 logger = logging.getLogger(__name__)
 
+
+# ── Lifespan (startup / shutdown) ────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown hooks — connect/close Redis."""
+    logger.info("Starting Redis connection...")
+    await connect_redis()
+    logger.info("Startup complete — %s v%s", settings.APP_NAME, settings.APP_VERSION)
+    yield
+    logger.info("Shutting down Redis connection...")
+    await close_redis()
+
+
 # ── Application factory ───────────────────────────────────────────────────────
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(

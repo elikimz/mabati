@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+from app.core.cache import cache_response, invalidate_cache
 from app.core.dependencies import get_db
 from app.models.banner import Banner
 from app.schemas.banner import BannerCreate, BannerUpdate, BannerOut
@@ -14,6 +15,7 @@ from app.models.user import User
 router = APIRouter(tags=["Banners"])
 
 @router.get("/banners", response_model=List[BannerOut])
+@cache_response(prefix="banners", ttl=900)  # 15 min cache
 async def list_banners(
     location: Optional[str] = None,
     active_only: bool = True,
@@ -42,6 +44,7 @@ async def create_banner(
     db.add(banner)
     await db.commit()
     await db.refresh(banner)
+    await invalidate_cache(prefix="banners")
     return banner
 
 @router.patch("/admin/banners/{banner_id}", response_model=BannerOut)
@@ -65,6 +68,7 @@ async def update_banner(
     
     await db.commit()
     await db.refresh(banner)
+    await invalidate_cache(prefix="banners")
     return banner
 
 @router.delete("/admin/banners/{banner_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -83,4 +87,5 @@ async def delete_banner(
     
     await db.delete(banner)
     await db.commit()
+    await invalidate_cache(prefix="banners")
     return None

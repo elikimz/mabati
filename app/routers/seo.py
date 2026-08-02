@@ -16,7 +16,7 @@ router = APIRouter(tags=["SEO"])
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Change this to your actual production domain
-SITE_DOMAIN = "mrmmabati.co.ke"
+SITE_DOMAIN = "www.mrmkenyarollingmills.online"
 FRONTEND_URL = f"https://{SITE_DOMAIN}"
 
 
